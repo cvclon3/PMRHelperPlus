@@ -4,6 +4,9 @@ import openai
 import datetime
 import json
 
+import requests
+import pandas as pd
+
 from data.commands import commands  # Справочник команд
 from data.schedule_upper_week import upper_schedule_text  # Расписание верхней недели
 from data.schedule_lower_week import lower_schedule_text  # Расписание нижней недели
@@ -19,12 +22,16 @@ with open("keys/ChatGPT_API.txt", 'r') as KEY:
     openai.api_key = KEY.read()
 
 
-with open('keys\whitelist.json', 'r') as f:
+with open('keys/whitelist.json', 'r') as f:
     whitelist = json.loads(f.read())
 
 
-with open('keys\whitelist_admin.json', 'r') as f:
+with open('keys/whitelist_admin.json', 'r') as f:
     admin_whitelist = json.loads(f.read())
+
+with open('keys/vuz2.json', 'r+') as VUZ2:
+    vuz2 = json.loads(VUZ2.read())
+    print(type(vuz2))
 
 # endregion
 
@@ -33,6 +40,30 @@ with open('keys\whitelist_admin.json', 'r') as f:
 
 check_whitelist = lambda message: message.chat.id in whitelist
 check_admin = lambda message: message.chat.id in admin_whitelist
+
+def vuz2_request(vuz2_user_id):
+    url = "http://vuz2.bru.by/rate/"
+    user = str(vuz2_user_id) + "/"
+    url += user
+    result = requests.get(url)
+
+    table_html = result.content.decode(encoding="cp1251", errors="ignore")
+
+    table_start = table_html.find("<table")
+    table_end = table_html.find("</table>") + len("</table>")
+
+    table = table_html[table_start: table_end]
+
+    df = pd.read_html(table)
+    #print(table)
+    result = str(df[0].iloc[3, :])
+    return result
+    # pd.set_option("display.max_columns", None)
+
+    # print(df[0].__sizeof__())
+    # print(type(df[0]))
+
+    #df[0].to_csv("table.csv", encoding="utf-8")
 
 # endregion
 
@@ -55,7 +86,7 @@ def starter_bot(message):
     mess = 'Приветствую!\n\n' \
            'Я - бот-помощник студентов группы ПМР\n\n' \
            'Я стараюсь быть полезным для моих пользователей предоставляя им различный функционал\n\n' \
-           'Админ - @olider_db'
+
 
     keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
     start_button = types.KeyboardButton('Начало')
@@ -187,6 +218,16 @@ def print_lower_week(message):
     lower_schedule = ''.join(lower_schedule_text.split('split_element'))
     bot.send_message(message.chat.id, lower_schedule)
 
+
+@bot.message_handler(commands=["vuz2"])
+def print_module(message):
+    user_id = str(message.from_user.id)
+    if user_id in vuz2:
+        vuz2_user_id = vuz2[user_id]
+        result = vuz2_request(vuz2_user_id)
+        bot.send_message(message.chat.id, result)
+    else:
+        bot.send_message(message.chat.id, "No")
 # endregion
 
 
@@ -266,56 +307,6 @@ def print_adminwhitelist(message):
 
 
 # region user text handlers
-
-@bot.message_handler(content_types=['text'], func=check_whitelist)
-def handler_message(message):
-    """Обработчик сообщений"""
-
-    if message.text == 'Начало':
-
-        keyboard = types.ReplyKeyboardMarkup(resize_keyboard=True)
-
-        schedule_button = types.KeyboardButton('Расписание')
-        help_button = types.KeyboardButton('Что ты можешь?')
-        question_button = types.KeyboardButton('Задать вопрос ChatGPT')
-
-        keyboard.add(schedule_button, question_button, help_button)
-
-        bot.send_message(message.chat.id, 'Приступим к работе', reply_markup=keyboard)
-
-    elif message.text == 'Что ты можешь?':
-        bot.send_message(message.chat.id, f'Вот команды, которые я знаю:\n\n{commands}')
-
-    elif message.text == 'Расписание':
-
-        keyboard = types.InlineKeyboardMarkup(row_width=2)
-
-        monday = types.InlineKeyboardButton('Понедельник', callback_data='monday')
-        tuesday = types.InlineKeyboardButton('Вторник', callback_data='tuesday')
-        wednesday = types.InlineKeyboardButton('Среда', callback_data='wednesday')
-        thursday = types.InlineKeyboardButton('Четверг', callback_data='thursday')
-        friday = types.InlineKeyboardButton('Пятница', callback_data='friday')
-        week = types.InlineKeyboardButton('Вся неделя', callback_data='week')
-        upper_week_button = types.InlineKeyboardButton('Верхняя неделя', callback_data='upper_week')
-        lowe_week_button = types.InlineKeyboardButton('Нижняя неделя', callback_data='lower_week')
-        photo_schedule = types.InlineKeyboardButton('Фотка расписания', callback_data='photo_schedule')
-        week_position = types.InlineKeyboardButton('Какая сейчас неделя?', callback_data='week_position')
-
-        keyboard.add(monday, tuesday, wednesday, thursday, friday, week,
-                     upper_week_button, lowe_week_button, photo_schedule, week_position)
-
-        bot.send_message(message.chat.id, 'Выберите расписание:', reply_markup=keyboard)
-
-    elif message.text == 'Задать вопрос ChatGPT':
-        bot.send_message(message.chat.id, 'Чтобы написать вопрос ChatGPT напишите "/?" и свой вопрос\n')
-
-    elif message.text[:2] == '??':  # почему-то эта штука работает ток в лс, я хз че делать в группе
-        reply = reply_ChatGPT(message)
-        bot.send_message(message.chat.id, reply, parse_mode='html')
-
-    else:
-        bot.send_message(message.chat.id, 'Неизвестная команда :(')
-
 # endregion
 
 
@@ -394,7 +385,8 @@ BotCommands = [
     types.BotCommand('position', 'Определяет, верхняя или нижняя неделя'),
     types.BotCommand('upper_week', 'Выводит верхнюю неделю'),
     types.BotCommand('lower_week', 'Выводит нижнюю неделю'),
-    types.BotCommand('q', 'Позволяет написать сообщение ChatGPT боту и получить на него ответ')
+    types.BotCommand('q', 'Позволяет написать сообщение ChatGPT боту и получить на него ответ'),
+    types.BotCommand('vuz2', "Выводит таблицу модульных баллов")
 ]
 bot.set_my_commands(BotCommands)
 
