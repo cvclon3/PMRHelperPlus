@@ -11,11 +11,11 @@ from data.schedule_lower_week import lower_schedule_text  # Расписание
 
 # region open tokens and lists
 
-with open("keys/PMRhelper_API", 'r') as TOKEN:
+with open("keys/PMRhelper_API.txt", 'r') as TOKEN:
     bot = telebot.TeleBot(token=TOKEN.read())
 
 
-with open("keys/ChatGPT_API", 'r') as KEY:
+with open("keys/ChatGPT_API.txt", 'r') as KEY:
     openai.api_key = KEY.read()
 
 
